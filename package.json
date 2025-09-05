@@ -1,0 +1,31 @@
+{
+  "name": "boardtime-be",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Project-BoardTime/BoardTime-BE.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Project-BoardTime/BoardTime-BE/issues"
+  },
+  "homepage": "https://github.com/Project-BoardTime/BoardTime-BE#readme",
+  "dependencies": {
+    "dotenv": "^17.2.2",
+    "express": "^5.1.0",
+    "mongodb": "^6.19.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
