@@ -22,11 +22,9 @@ router.post("/", async (req, res) => {
 
     // 2. 필수 데이터 유효성 검사
     if (!title || !password || !dateOptions || dateOptions.length === 0) {
-      return res
-        .status(400)
-        .json({
-          error: "필수 항목(제목, 비밀번호, 날짜 옵션)이 누락되었습니다.",
-        });
+      return res.status(400).json({
+        error: "필수 항목(제목, 비밀번호, 날짜 옵션)이 누락되었습니다.",
+      });
     }
 
     // 3. 데이터베이스에 저장할 문서(document) 생성
@@ -58,6 +56,51 @@ router.post("/", async (req, res) => {
     res.status(201).json({ meetingId: result.insertedId });
   } catch (error) {
     console.error("모임 생성 오류:", error);
+    res.status(500).json({ error: "서버 오류가 발생했습니다." });
+  }
+});
+
+// POST /api/meetings/:id/participants - 특정 모임에 새로운 참여자 추가
+router.post("/:id/participants", async (req, res) => {
+  try {
+    const db = req.app.locals.db;
+    const meetingsCollection = db.collection("meetings");
+
+    const { id } = req.params;
+    const { nickname, password } = req.body;
+
+    // 1. 유효성 검사
+    if (!ObjectId.isValid(id)) {
+      return res
+        .status(400)
+        .json({ error: "유효하지 않은 모임 ID 형식입니다." });
+    }
+    if (!nickname || !password) {
+      return res.status(400).json({ error: "닉네임과 비밀번호는 필수입니다." });
+    }
+
+    const newParticipant = {
+      _id: new ObjectId(), // 참여자에게도 고유 ID 부여
+      nickname,
+      password, // 실제로는 암호화 필요
+      // votes: [] // 투표 정보를 여기에 저장할 수도 있습니다.
+    };
+
+    // 2. DB 업데이트: 'participants' 배열에 새로운 참여자 추가
+    const result = await meetingsCollection.updateOne(
+      { _id: new ObjectId(id) }, // ID가 일치하는 모임을 찾아서
+      { $push: { participants: newParticipant } } // participants 배열에 newParticipant를 추가
+    );
+
+    // 3. 업데이트가 실패한 경우 (해당 ID의 모임이 없음)
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: "해당 모임을 찾을 수 없습니다." });
+    }
+
+    // 4. 성공 응답 (새로운 참여자의 ID 반환)
+    res.status(201).json({ participantId: newParticipant._id });
+  } catch (error) {
+    console.error("참여자 추가 오류:", error);
     res.status(500).json({ error: "서버 오류가 발생했습니다." });
   }
 });
