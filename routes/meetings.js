@@ -105,4 +105,34 @@ router.post("/:id/participants", async (req, res) => {
   }
 });
 
+// GET /api/meetings/:id - 특정 모임 상세 조회
+router.get("/:id", async (req, res) => {
+  try {
+    const db = req.app.locals.db;
+    const meetingsCollection = db.collection("meetings");
+
+    // 1. URL 파라미터에서 모임 ID 가져오기
+    const { id } = req.params;
+
+    // 2. ID 형식 검사
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "유효하지 않은 ID 형식입니다." });
+    }
+
+    // 3. 데이터베이스에서 해당 ID를 가진 모임 찾기
+    const meeting = await meetingsCollection.findOne({ _id: new ObjectId(id) });
+
+    // 4. 모임이 존재하지 않는 경우
+    if (!meeting) {
+      return res.status(404).json({ error: "해당 모임을 찾을 수 없습니다." });
+    }
+
+    // 5. 모임 정보 응답
+    res.status(200).json(meeting);
+  } catch (error) {
+    console.error("모임 조회 오류:", error);
+    res.status(500).json({ error: "서버 오류가 발생했습니다." });
+  }
+});
+
 module.exports = router;
