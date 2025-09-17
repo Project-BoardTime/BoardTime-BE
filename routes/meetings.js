@@ -135,4 +135,62 @@ router.get("/:id", async (req, res) => {
   }
 });
 
+// POST /api/meetings/:id/votes - 특정 모임에 투표하기 (또는 투표 수정)
+router.post("/:id/votes", async (req, res) => {
+  try {
+    const db = req.app.locals.db;
+    const meetingsCollection = db.collection("meetings");
+
+    const { id } = req.params;
+    const { participantId, dateOptionIds } = req.body;
+
+    // 1. 유효성 검사
+    if (!ObjectId.isValid(id) || !ObjectId.isValid(participantId)) {
+      return res.status(400).json({ error: "유효하지 않은 ID 형식입니다." });
+    }
+    if (!dateOptionIds || !Array.isArray(dateOptionIds)) {
+      return res
+        .status(400)
+        .json({ error: "날짜 선택(dateOptionIds)은 배열 형태여야 합니다." });
+    }
+
+    const meeting = await meetingsCollection.findOne({ _id: new ObjectId(id) });
+    if (!meeting) {
+      return res.status(404).json({ error: "해당 모임을 찾을 수 없습니다." });
+    }
+
+    // 2. (초기화) 모든 dateOptions의 votes 배열에서 해당 participantId 제거
+    await meetingsCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $pull: { "dateOptions.$[].votes": new ObjectId(participantId) } }
+    );
+
+    // 3. (추가) 선택된 dateOptions의 votes 배열에 participantId 추가
+    const result = await meetingsCollection.updateOne(
+      { _id: new ObjectId(id) },
+      {
+        $addToSet: { "dateOptions.$[elem].votes": new ObjectId(participantId) },
+      },
+      {
+        arrayFilters: [
+          {
+            "elem._id": {
+              $in: dateOptionIds.map((optId) => new ObjectId(optId)),
+            },
+          },
+        ],
+      }
+    );
+
+    if (result.modifiedCount === 0 && result.matchedCount === 0) {
+      return res.status(404).json({ error: "투표할 날짜를 찾을 수 없습니다." });
+    }
+
+    res.status(200).json({ message: "투표가 성공적으로 저장되었습니다." });
+  } catch (error) {
+    console.error("투표 처리 오류:", error);
+    res.status(500).json({ error: "서버 오류가 발생했습니다." });
+  }
+});
+
 module.exports = router;
