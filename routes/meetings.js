@@ -285,4 +285,42 @@ router.get("/:id/votes/:dateOptionId", async (req, res) => {
   }
 });
 
+// DELETE /api/meetings/:id - 특정 모임 삭제
+// 요청 Body에 password를 추가로 받습니다.
+router.delete("/:id", async (req, res) => {
+  try {
+    const db = req.app.locals.db;
+    const meetingsCollection = db.collection("meetings");
+    const { id } = req.params;
+    const { password } = req.body; // 요청 Body에서 비밀번호를 받음
+
+    if (!password) {
+      return res
+        .status(401)
+        .json({ error: "삭제 권한 확인을 위해 비밀번호가 필요합니다." });
+    }
+
+    // DB에서 해당 모임을 찾음
+    const meeting = await meetingsCollection.findOne({ _id: new ObjectId(id) });
+
+    if (!meeting) {
+      return res.status(404).json({ error: "삭제할 모임을 찾을 수 없습니다." });
+    }
+
+    // **비밀번호 확인 절차 추가**
+    if (meeting.password !== password) {
+      return res
+        .status(403)
+        .json({ error: "비밀번호가 일치하지 않아 삭제할 수 없습니다." });
+    }
+
+    // 비밀번호가 일치하면 삭제 실행
+    await meetingsCollection.deleteOne({ _id: new ObjectId(id) });
+
+    res.status(200).json({ message: "모임이 성공적으로 삭제되었습니다." });
+  } catch (error) {
+    // ... 에러 처리
+  }
+});
+
 module.exports = router;
