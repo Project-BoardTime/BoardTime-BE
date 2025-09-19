@@ -226,4 +226,52 @@ router.get("/:id/votes", async (req, res) => {
   }
 });
 
+// GET /api/meetings/:id/votes/:dateOptionId - 특정 날짜에 투표한 참여자 목록 조회
+router.get("/:id/votes/:dateOptionId", async (req, res) => {
+  try {
+    const db = req.app.locals.db;
+    const meetingsCollection = db.collection("meetings");
+    const { id, dateOptionId } = req.params;
+
+    if (!ObjectId.isValid(id) || !ObjectId.isValid(dateOptionId)) {
+      return res.status(400).json({ error: "유효하지 않은 ID 형식입니다." });
+    }
+
+    const meeting = await meetingsCollection.findOne({ _id: new ObjectId(id) });
+
+    if (!meeting) {
+      return res.status(404).json({ error: "해당 모임을 찾을 수 없습니다." });
+    }
+
+    // 해당 날짜 옵션 찾기
+    const targetOption = meeting.dateOptions.find(
+      (option) => option._id.toString() === dateOptionId
+    );
+
+    if (!targetOption) {
+      return res
+        .status(404)
+        .json({ error: "해당 날짜 옵션을 찾을 수 없습니다." });
+    }
+
+    // 투표한 참여자들의 ID 목록
+    const voterIds = targetOption.votes;
+
+    // 전체 참여자 목록에서 투표한 참여자들의 정보만 필터링
+    const votersInfo = meeting.participants
+      .filter((participant) =>
+        voterIds.some((voterId) => voterId.equals(participant._id))
+      )
+      .map((participant) => ({
+        participantId: participant._id,
+        nickname: participant.nickname,
+      }));
+
+    res.status(200).json(votersInfo);
+  } catch (error) {
+    console.error("참여자 목록 조회 오류:", error);
+    res.status(500).json({ error: "서버 오류가 발생했습니다." });
+  }
+});
+
 module.exports = router;
