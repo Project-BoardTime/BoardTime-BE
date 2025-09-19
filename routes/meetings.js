@@ -193,4 +193,37 @@ router.post("/:id/votes", async (req, res) => {
   }
 });
 
+// GET /api/meetings/:id/votes - 날짜별 투표 결과 조회
+router.get("/:id/votes", async (req, res) => {
+  try {
+    const db = req.app.locals.db;
+    const meetingsCollection = db.collection("meetings");
+    const { id } = req.params;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "유효하지 않은 ID 형식입니다." });
+    }
+
+    const meeting = await meetingsCollection.findOne({ _id: new ObjectId(id) });
+
+    if (!meeting) {
+      return res.status(404).json({ error: "해당 모임을 찾을 수 없습니다." });
+    }
+
+    // 투표 결과를 담을 객체 생성
+    const voteResults = {};
+
+    // 각 날짜 옵션을 순회하며 투표자 수를 계산
+    meeting.dateOptions.forEach((option) => {
+      // Key: 날짜 옵션의 _id, Value: votes 배열의 길이 (투표자 수)
+      voteResults[option._id] = option.votes.length;
+    });
+
+    res.status(200).json(voteResults);
+  } catch (error) {
+    console.error("투표 결과 조회 오류:", error);
+    res.status(500).json({ error: "서버 오류가 발생했습니다." });
+  }
+});
+
 module.exports = router;
