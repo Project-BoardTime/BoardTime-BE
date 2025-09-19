@@ -135,8 +135,7 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-// POST /api/meetings/:id/votes - 특정 모임에 투표하기 (또는 투표 수정)
-router.post("/:id/votes", async (req, res) => {
+const voteHandler = async (req, res) => {
   try {
     const db = req.app.locals.db;
     const meetingsCollection = db.collection("meetings");
@@ -144,7 +143,6 @@ router.post("/:id/votes", async (req, res) => {
     const { id } = req.params;
     const { participantId, dateOptionIds } = req.body;
 
-    // 1. 유효성 검사
     if (!ObjectId.isValid(id) || !ObjectId.isValid(participantId)) {
       return res.status(400).json({ error: "유효하지 않은 ID 형식입니다." });
     }
@@ -159,13 +157,11 @@ router.post("/:id/votes", async (req, res) => {
       return res.status(404).json({ error: "해당 모임을 찾을 수 없습니다." });
     }
 
-    // 2. (초기화) 모든 dateOptions의 votes 배열에서 해당 participantId 제거
     await meetingsCollection.updateOne(
       { _id: new ObjectId(id) },
       { $pull: { "dateOptions.$[].votes": new ObjectId(participantId) } }
     );
 
-    // 3. (추가) 선택된 dateOptions의 votes 배열에 participantId 추가
     const result = await meetingsCollection.updateOne(
       { _id: new ObjectId(id) },
       {
@@ -182,16 +178,31 @@ router.post("/:id/votes", async (req, res) => {
       }
     );
 
-    if (result.modifiedCount === 0 && result.matchedCount === 0) {
+    if (
+      result.modifiedCount === 0 &&
+      result.matchedCount === 0 &&
+      dateOptionIds.length > 0
+    ) {
       return res.status(404).json({ error: "투표할 날짜를 찾을 수 없습니다." });
     }
 
-    res.status(200).json({ message: "투표가 성공적으로 저장되었습니다." });
+    // 요청 메서드에 따라 다른 메시지를 보낼 수 있습니다.
+    const message =
+      req.method === "POST"
+        ? "투표가 성공적으로 저장되었습니다."
+        : "투표가 성공적으로 수정되었습니다.";
+    res.status(200).json({ message });
   } catch (error) {
     console.error("투표 처리 오류:", error);
     res.status(500).json({ error: "서버 오류가 발생했습니다." });
   }
-});
+};
+
+// POST /api/meetings/:id/votes - 특정 모임에 투표하기
+router.post("/:id/votes", voteHandler);
+
+// PUT /api/meetings/:id/votes - 특정 모임 투표 수정하기
+router.put("/:id/votes", voteHandler);
 
 // GET /api/meetings/:id/votes - 날짜별 투표 결과 조회
 router.get("/:id/votes", async (req, res) => {
