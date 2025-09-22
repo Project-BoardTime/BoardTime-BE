@@ -323,4 +323,57 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
+// PUT /api/meetings/:id - 특정 모임 정보 수정
+router.put("/:id", async (req, res) => {
+  try {
+    const db = req.app.locals.db;
+    const meetingsCollection = db.collection("meetings");
+    const { id } = req.params;
+    const { password, title, description, deadline } = req.body; // 수정할 정보와 비밀번호를 받음
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "유효하지 않은 ID 형식입니다." });
+    }
+    if (!password) {
+      return res
+        .status(401)
+        .json({ error: "수정 권한 확인을 위해 비밀번호가 필요합니다." });
+    }
+
+    const meeting = await meetingsCollection.findOne({ _id: new ObjectId(id) });
+    if (!meeting) {
+      return res.status(404).json({ error: "수정할 모임을 찾을 수 없습니다." });
+    }
+
+    // 비밀번호 확인
+    if (meeting.password !== password) {
+      return res
+        .status(403)
+        .json({ error: "비밀번호가 일치하지 않아 수정할 수 없습니다." });
+    }
+
+    // 업데이트할 내용만 객체로 구성
+    const updates = {};
+    if (title) updates.title = title;
+    if (description) updates.description = description;
+    if (deadline) updates.deadline = new Date(deadline);
+
+    // 업데이트할 내용이 없으면 아무것도 하지 않음
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: "수정할 내용이 없습니다." });
+    }
+
+    // DB 업데이트
+    const result = await meetingsCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updates }
+    );
+
+    res.status(200).json({ message: "모임 정보가 성공적으로 수정되었습니다." });
+  } catch (error) {
+    console.error("모임 수정 오류:", error);
+    res.status(500).json({ error: "서버 오류가 발생했습니다." });
+  }
+});
+
 module.exports = router;
