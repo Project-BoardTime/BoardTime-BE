@@ -1,4 +1,8 @@
 const { ObjectId } = require("mongodb");
+const bcrypt = require("bcrypt");
+
+// 비밀번호 해싱을 위한 'salt rounds' 설정. 숫자가 높을수록 보안이 강해지지만 처리 시간이 길어짐.
+const saltRounds = 10;
 
 // POST /api/meetings - 새로운 모임 생성
 exports.createMeeting = async (req, res) => {
@@ -16,19 +20,20 @@ exports.createMeeting = async (req, res) => {
       dateOptions,
     } = req.body;
 
-    if (!title || !password || !dateOptions || dateOptions.length === 0) {
-      return res
-        .status(400)
-        .json({
-          error: "필수 항목(제목, 비밀번호, 날짜 옵션)이 누락되었습니다.",
-        });
+    if (!title || !password || !dateOptions || !dateOptions.length) {
+      return res.status(400).json({
+        error: "필수 항목(제목, 비밀번호, 날짜 옵션)이 누락되었습니다.",
+      });
     }
+
+    // 비밀번호 암호화
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
 
     const newMeeting = {
       title,
       description,
       place: { name: placeName, lat: placeLat, lng: placeLng },
-      password,
+      password: hashedPassword, // 암호화된 비밀번호 저장
       deadline: new Date(deadline),
       dateOptions: dateOptions.map((dateStr) => ({
         _id: new ObjectId(),
@@ -86,7 +91,14 @@ exports.addParticipant = async (req, res) => {
       return res.status(400).json({ error: "닉네임과 비밀번호는 필수입니다." });
     }
 
-    const newParticipant = { _id: new ObjectId(), nickname, password };
+    // 참여자 비밀번호 암호화
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    const newParticipant = {
+      _id: new ObjectId(),
+      nickname,
+      password: hashedPassword,
+    };
+
     const result = await meetingsCollection.updateOne(
       { _id: new ObjectId(id) },
       { $push: { participants: newParticipant } }
@@ -240,9 +252,6 @@ exports.updateMeeting = async (req, res) => {
     const { id } = req.params;
     const { password, title, description, deadline } = req.body;
 
-    if (!ObjectId.isValid(id)) {
-      return res.status(400).json({ error: "유효하지 않은 ID 형식입니다." });
-    }
     if (!password) {
       return res
         .status(401)
@@ -254,7 +263,9 @@ exports.updateMeeting = async (req, res) => {
       return res.status(404).json({ error: "수정할 모임을 찾을 수 없습니다." });
     }
 
-    if (meeting.password !== password) {
+    // 비밀번호 비교
+    const isMatch = await bcrypt.compare(password, meeting.password);
+    if (!isMatch) {
       return res
         .status(403)
         .json({ error: "비밀번호가 일치하지 않아 수정할 수 없습니다." });
@@ -265,14 +276,13 @@ exports.updateMeeting = async (req, res) => {
     if (description) updates.description = description;
     if (deadline) updates.deadline = new Date(deadline);
 
-    if (Object.keys(updates).length === 0) {
-      return res.status(400).json({ error: "수정할 내용이 없습니다." });
+    if (Object.keys(updates).length > 0) {
+      await meetingsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: updates }
+      );
     }
 
-    await meetingsCollection.updateOne(
-      { _id: new ObjectId(id) },
-      { $set: updates }
-    );
     res.status(200).json({ message: "모임 정보가 성공적으로 수정되었습니다." });
   } catch (error) {
     console.error("모임 수정 오류:", error);
@@ -293,16 +303,15 @@ exports.deleteMeeting = async (req, res) => {
         .status(401)
         .json({ error: "삭제 권한 확인을 위해 비밀번호가 필요합니다." });
     }
-    if (!ObjectId.isValid(id)) {
-      return res.status(400).json({ error: "유효하지 않은 ID 형식입니다." });
-    }
 
     const meeting = await meetingsCollection.findOne({ _id: new ObjectId(id) });
     if (!meeting) {
       return res.status(404).json({ error: "삭제할 모임을 찾을 수 없습니다." });
     }
 
-    if (meeting.password !== password) {
+    // 비밀번호 비교
+    const isMatch = await bcrypt.compare(password, meeting.password);
+    if (!isMatch) {
       return res
         .status(403)
         .json({ error: "비밀번호가 일치하지 않아 삭제할 수 없습니다." });
