@@ -91,7 +91,20 @@ exports.addParticipant = async (req, res) => {
       return res.status(400).json({ error: "닉네임과 비밀번호는 필수입니다." });
     }
 
-    // 참여자 비밀번호 암호화
+    // --- 닉네임 중복 확인 로직 시작 ---
+    const meeting = await meetingsCollection.findOne({ _id: new ObjectId(id) });
+    if (!meeting) {
+      return res.status(404).json({ error: "해당 모임을 찾을 수 없습니다." });
+    }
+
+    const isNicknameTaken = meeting.participants.some(
+      (participant) => participant.nickname === nickname
+    );
+    if (isNicknameTaken) {
+      return res.status(409).json({ error: "이미 사용 중인 닉네임입니다." });
+    }
+    // --- 닉네임 중복 확인 로직 끝 ---
+
     const hashedPassword = await bcrypt.hash(password, saltRounds);
     const newParticipant = {
       _id: new ObjectId(),
@@ -99,14 +112,11 @@ exports.addParticipant = async (req, res) => {
       password: hashedPassword,
     };
 
-    const result = await meetingsCollection.updateOne(
+    await meetingsCollection.updateOne(
       { _id: new ObjectId(id) },
       { $push: { participants: newParticipant } }
     );
 
-    if (result.matchedCount === 0) {
-      return res.status(404).json({ error: "해당 모임을 찾을 수 없습니다." });
-    }
     res.status(201).json({ participantId: newParticipant._id });
   } catch (error) {
     console.error("참여자 추가 오류:", error);
