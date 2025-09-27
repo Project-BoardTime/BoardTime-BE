@@ -130,21 +130,45 @@ exports.handleVote = async (req, res) => {
     const db = req.app.locals.db;
     const meetingsCollection = db.collection("meetings");
     const { id } = req.params;
-    const { participantId, dateOptionIds } = req.body;
+    // 요청 Body에서 participantId 대신 nickname, password를 받습니다.
+    const { nickname, password, dateOptionIds } = req.body;
 
-    if (!ObjectId.isValid(id) || !ObjectId.isValid(participantId)) {
+    if (!ObjectId.isValid(id)) {
       return res.status(400).json({ error: "유효하지 않은 ID 형식입니다." });
     }
-    if (!dateOptionIds || !Array.isArray(dateOptionIds)) {
+    if (
+      !nickname ||
+      !password ||
+      !dateOptionIds ||
+      !Array.isArray(dateOptionIds)
+    ) {
       return res
         .status(400)
-        .json({ error: "날짜 선택(dateOptionIds)은 배열 형태여야 합니다." });
+        .json({ error: "닉네임, 비밀번호, 날짜 선택은 필수입니다." });
     }
 
     const meeting = await meetingsCollection.findOne({ _id: new ObjectId(id) });
     if (!meeting) {
       return res.status(404).json({ error: "해당 모임을 찾을 수 없습니다." });
     }
+
+    // --- 참여자 인증 로직 시작 ---
+    const participant = meeting.participants.find(
+      (p) => p.nickname === nickname
+    );
+    if (!participant) {
+      return res
+        .status(403)
+        .json({ error: "해당 닉네임의 참여자를 찾을 수 없습니다." });
+    }
+
+    const isMatch = await bcrypt.compare(password, participant.password);
+    if (!isMatch) {
+      return res.status(403).json({ error: "비밀번호가 일치하지 않습니다." });
+    }
+    // --- 참여자 인증 로직 끝 ---
+
+    const participantId = participant._id; // 인증 성공 후, participantId를 사용
 
     await meetingsCollection.updateOne(
       { _id: new ObjectId(id) },
