@@ -67,7 +67,20 @@ exports.getMeetingDetails = async (req, res) => {
     if (!meeting) {
       return res.status(404).json({ error: "해당 모임을 찾을 수 없습니다." });
     }
-    res.status(200).json(meeting);
+
+    // --- 마감 여부 확인 로직 시작 ---
+    const now = new Date();
+    const deadline = new Date(meeting.deadline);
+    const isExpired = now > deadline;
+    // --- 마감 여부 확인 로직 끝 ---
+
+    // 응답 데이터에 isExpired 필드 추가
+    const responseData = {
+      ...meeting,
+      isExpired,
+    };
+
+    res.status(200).json(responseData);
   } catch (error) {
     console.error("모임 조회 오류:", error);
     res.status(500).json({ error: "서버 오류가 발생했습니다." });
