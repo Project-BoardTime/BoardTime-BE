@@ -7,6 +7,7 @@ router.post("/", meetingsController.createMeeting);
 router.post("/:id/participants", meetingsController.addParticipant);
 
 // R(Read)
+router.get("/search", meetingsController.searchMeetings);
 router.get("/:id", meetingsController.getMeetingDetails);
 router.get("/:id/votes", meetingsController.getVoteResults);
 router.get("/:id/votes/:dateOptionId", meetingsController.getVotersForDate);
