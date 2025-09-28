@@ -371,3 +371,31 @@ exports.deleteMeeting = async (req, res) => {
     res.status(500).json({ error: "서버 오류가 발생했습니다." });
   }
 };
+
+// GET /api/meetings/search - 모임 검색
+exports.searchMeetings = async (req, res) => {
+  try {
+    const db = req.app.locals.db;
+    const meetingsCollection = db.collection("meetings");
+
+    // 1. 쿼리 파라미터에서 검색어(title)를 가져옵니다.
+    const { title } = req.query;
+
+    if (!title) {
+      return res.status(400).json({ error: "검색어(title)를 입력해주세요." });
+    }
+
+    // 2. 대소문자 구분을 안 하는 정규식으로 검색 쿼리 생성
+    const query = { title: new RegExp(title, "i") };
+
+    // 3. DB에서 일치하는 모든 모임을 찾고, password 필드는 제외하고 반환
+    const meetings = await meetingsCollection
+      .find(query, { projection: { password: 0 } })
+      .toArray();
+
+    res.status(200).json(meetings);
+  } catch (error) {
+    console.error("모임 검색 오류:", error);
+    res.status(500).json({ error: "서버 오류가 발생했습니다." });
+  }
+};
