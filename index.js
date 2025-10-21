@@ -3,6 +3,7 @@ require("dotenv").config();
 
 const express = require("express");
 const { MongoClient } = require("mongodb");
+const cors = require("cors"); // 1. cors 패키지를 불러옵니다.
 
 // 라우터 파일들을 불러옵니다.
 // const postRoutes = require("./routes/posts");
@@ -15,6 +16,24 @@ const uri = process.env.MONGO_URI;
 // MongoDB 클라이언트 인스턴스를 생성합니다.
 const client = new MongoClient(uri);
 
+// 2. 허용할 출처(origin) 목록을 정의합니다.
+const allowedOrigins = [
+  "http://localhost:3000", // 로컬 프론트엔드 개발 서버 주소
+  // 'https://boardtime-fe.vercel.app' // TODO: 나중에 프론트엔드 배포 후 실제 주소로 변경
+];
+
+// 3. CORS 옵션을 설정합니다.
+const corsOptions = {
+  origin: function (origin, callback) {
+    // 요청 출처가 허용 목록에 있거나, 출처가 없는 경우(예: Postman) 허용
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+};
+
 async function run() {
   try {
     // MongoDB 데이터베이스에 연결합니다.
@@ -23,10 +42,10 @@ async function run() {
 
     // 사용할 데이터베이스를 'boardtime'으로 지정합니다.
     const db = client.db("boardtime");
-
-    // db 객체를 app 전체에서 사용할 수 있도록 app.locals에 저장합니다.
-    // 이렇게 하면 다른 라우터 파일에서 req.app.locals.db로 접근할 수 있습니다.
     app.locals.db = db;
+
+    // 4. CORS 미들웨어를 모든 라우트보다 먼저 적용합니다.
+    app.use(cors(corsOptions));
 
     // JSON 미들웨어 설정: 클라이언트 요청의 body를 json 형식으로 파싱해줍니다.
     app.use(express.json());
@@ -37,10 +56,6 @@ async function run() {
     });
 
     // API 라우트들을 미들웨어로 등록합니다.
-    // '/api/posts' 경로로 들어오는 모든 요청은 postRoutes가 처리합니다.
-    // app.use("/api/posts", postRoutes);
-
-    // '/api/meetings' 경로로 들어오는 모든 요청은 meetingRoutes가 처리합니다.
     app.use("/api/meetings", meetingRoutes);
 
     // 지정된 포트에서 서버를 실행합니다.
