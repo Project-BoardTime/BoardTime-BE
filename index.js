@@ -22,6 +22,15 @@ const allowedOrigins = [
   // 'https://boardtime-fe.vercel.app' // TODO: 나중에 프론트엔드 배포 후 실제 주소로 변경
 ];
 
+// --- 로그 추가 시작 ---
+// 모든 요청에 대해 Origin 헤더를 출력하는 미들웨어
+app.use((req, res, next) => {
+  console.log("--- Request Received ---");
+  console.log("Origin Header:", req.headers.origin); // 요청의 Origin 헤더 값 출력
+  next(); // 다음 미들웨어로 진행
+});
+// --- 로그 추가 끝 ---
+
 // 3. CORS 옵션을 설정합니다.
 const corsOptions = {
   origin: function (origin, callback) {
