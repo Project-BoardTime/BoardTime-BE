@@ -40,6 +40,36 @@ const corsOptions = {
   optionsSuccessStatus: 204, // 일부 레거시 브라우저를 위해 필요
 };
 
+// --- ★★★ 수동 사전 요청 핸들러 (맨 앞에 추가) ★★★ ---
+app.use((req, res, next) => {
+  // 사전 OPTIONS 요청인지 확인
+  if (req.method === "OPTIONS") {
+    console.log("--- Handling OPTIONS Request ---");
+    // 요청 출처가 허용 목록에 있는지 확인
+    const origin = req.headers.origin;
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      console.log("OPTIONS Allowed for:", origin);
+      res.header("Access-Control-Allow-Origin", origin || "*"); // 특정 출처 또는 * 허용
+      res.header(
+        "Access-Control-Allow-Methods",
+        "GET,HEAD,PUT,PATCH,POST,DELETE"
+      );
+      res.header(
+        "Access-Control-Allow-Headers",
+        "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+      ); // 프론트엔드가 보낼 수 있는 헤더 추가
+      res.header("Access-Control-Allow-Credentials", "true");
+      return res.sendStatus(204); // OPTIONS 요청에 204 OK 응답
+    } else {
+      console.log("OPTIONS Blocked for:", origin);
+      // 명시적으로 차단하기보다, 다음 미들웨어에서 처리하도록 넘어감
+    }
+  }
+  // OPTIONS 요청이 아니면 다음 미들웨어로 진행
+  next();
+});
+// --- 수동 사전 요청 핸들러 끝 ---
+
 // --- 요청 로깅 미들웨어 ---
 app.use((req, res, next) => {
   console.log("--- Request Received ---");
@@ -60,7 +90,7 @@ async function run() {
     app.locals.db = db;
 
     // --- CORS 미들웨어를 로깅 미들웨어 *다음에*, 다른 것들 *전에* 적용합니다. ---
-    // 이 위치에서 OPTIONS 요청도 자동으로 처리합니다.
+    // OPTIONS 아닌 요청 처리를 위해 여전히 필요합니다.
     app.use(cors(corsOptions));
     // --- CORS 미들웨어 끝 ---
 
