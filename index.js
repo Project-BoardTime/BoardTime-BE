@@ -35,15 +35,10 @@ const corsOptions = {
       callback(new Error("Not allowed by CORS"));
     }
   },
-  methods: "GET,HEAD,PUT,PATCH,POST,DELETE", // 허용할 HTTP 메서드 명시 (OPTIONS 해결에 도움)
+  methods: "GET,HEAD,PUT,PATCH,POST,DELETE", // 허용할 HTTP 메서드 명시
   credentials: true, // 필요시 쿠키 허용
   optionsSuccessStatus: 204, // 일부 레거시 브라우저를 위해 필요
 };
-
-// --- OPTIONS 사전 요청 핸들러 추가 ---
-// 모든 경로(*)에 대한 OPTIONS 요청을 먼저 처리하고 CORS 옵션을 적용합니다.
-app.options("*", cors(corsOptions));
-// --- OPTIONS 핸들러 추가 끝 ---
 
 // --- 요청 로깅 미들웨어 ---
 app.use((req, res, next) => {
@@ -64,10 +59,12 @@ async function run() {
     const db = client.db("boardtime");
     app.locals.db = db;
 
-    // CORS 미들웨어를 OPTIONS 핸들러와 로깅 미들웨어 *다음에* 적용합니다.
+    // --- CORS 미들웨어를 로깅 미들웨어 *다음에*, 다른 것들 *전에* 적용합니다. ---
+    // 이 위치에서 OPTIONS 요청도 자동으로 처리합니다.
     app.use(cors(corsOptions));
+    // --- CORS 미들웨어 끝 ---
 
-    // JSON 미들웨어 설정
+    // JSON 미들웨어 설정 (CORS 미들웨어 뒤에)
     app.use(express.json());
 
     // 기본 경로 라우트
