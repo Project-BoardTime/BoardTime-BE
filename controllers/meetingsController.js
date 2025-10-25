@@ -137,17 +137,19 @@ exports.addParticipant = async (req, res) => {
   }
 };
 
-// POST & PUT /api/meetings/:id/votes - 투표 생성 및 수정
+// POST & PUT /api/meetings/:id/votes - 투표 생성 및 수정 (자동 참여 등록 포함)
 exports.handleVote = async (req, res) => {
   try {
     const db = req.app.locals.db;
     const meetingsCollection = db.collection("meetings");
     const { id } = req.params;
-    // 요청 Body에서 participantId 대신 nickname, password를 받습니다.
     const { nickname, password, dateOptionIds } = req.body;
 
+    // 1. 기본 유효성 검사
     if (!ObjectId.isValid(id)) {
-      return res.status(400).json({ error: "유효하지 않은 ID 형식입니다." });
+      return res
+        .status(400)
+        .json({ error: "유효하지 않은 모임 ID 형식입니다." });
     }
     if (
       !nickname ||
@@ -160,39 +162,72 @@ exports.handleVote = async (req, res) => {
         .json({ error: "닉네임, 비밀번호, 날짜 선택은 필수입니다." });
     }
 
+    // 2. 모임 정보 가져오기
     const meeting = await meetingsCollection.findOne({ _id: new ObjectId(id) });
     if (!meeting) {
       return res.status(404).json({ error: "해당 모임을 찾을 수 없습니다." });
     }
 
-    // --- 참여자 인증 로직 시작 ---
-    const participant = meeting.participants.find(
-      (p) => p.nickname === nickname
-    );
-    if (!participant) {
-      return res
-        .status(403)
-        .json({ error: "해당 닉네임의 참여자를 찾을 수 없습니다." });
+    // 3. 참여자 찾기 또는 생성 & 인증
+    let participantId;
+    let participant = meeting.participants.find((p) => p.nickname === nickname);
+
+    if (participant) {
+      // --- 기존 참여자인 경우: 비밀번호 인증 ---
+      const isMatch = await bcrypt.compare(password, participant.password);
+      if (!isMatch) {
+        // 비밀번호가 틀리면 에러 반환
+        return res
+          .status(403)
+          .json({
+            error:
+              "비밀번호가 일치하지 않습니다. 기존 참여자는 정확한 비밀번호를 입력해주세요.",
+          });
+      }
+      participantId = participant._id; // 기존 참여자 ID 사용
+    } else {
+      // --- 새로운 참여자인 경우: 자동 등록 ---
+      // (혹시 모를 동시 요청 대비) 닉네임 중복 재확인
+      const isNicknameTaken = meeting.participants.some(
+        (p) => p.nickname === nickname
+      );
+      if (isNicknameTaken) {
+        return res.status(409).json({ error: "이미 사용 중인 닉네임입니다." });
+      }
+
+      // 새 참여자 비밀번호 해싱
+      const hashedPassword = await bcrypt.hash(password, saltRounds);
+      // 새 참여자 객체 생성 (새 ObjectId 부여)
+      const newParticipant = {
+        _id: new ObjectId(),
+        nickname,
+        password: hashedPassword,
+      };
+
+      // DB 업데이트: participants 배열에 새 참여자 추가
+      await meetingsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $push: { participants: newParticipant } }
+      );
+      participantId = newParticipant._id; // 새 참여자 ID 사용
+      console.log(`새 참여자 등록됨: ${nickname}`); // (선택적) 로그 기록
     }
 
-    const isMatch = await bcrypt.compare(password, participant.password);
-    if (!isMatch) {
-      return res.status(403).json({ error: "비밀번호가 일치하지 않습니다." });
-    }
-    // --- 참여자 인증 로직 끝 ---
+    // --- 4. 투표 처리 (결정된 participantId 사용) ---
 
-    const participantId = participant._id; // 인증 성공 후, participantId를 사용
-
+    // (초기화) 먼저 모든 날짜 옵션에서 해당 참여자의 투표 기록 삭제
     await meetingsCollection.updateOne(
       { _id: new ObjectId(id) },
       { $pull: { "dateOptions.$[].votes": new ObjectId(participantId) } }
     );
 
+    // (추가) 선택된 날짜 옵션들의 votes 배열에 참여자 ID 추가
     const result = await meetingsCollection.updateOne(
       { _id: new ObjectId(id) },
       {
         $addToSet: { "dateOptions.$[elem].votes": new ObjectId(participantId) },
       },
+      // arrayFilters를 사용하여 선택된 날짜 옵션(_id 기준)만 업데이트
       {
         arrayFilters: [
           {
@@ -204,12 +239,18 @@ exports.handleVote = async (req, res) => {
       }
     );
 
+    // (선택적) 업데이트 결과 확인
     if (
       result.modifiedCount === 0 &&
       result.matchedCount === 0 &&
       dateOptionIds.length > 0
     ) {
-      return res.status(404).json({ error: "투표할 날짜를 찾을 수 없습니다." });
+      console.warn(
+        `투표 업데이트 경고: 유효하지 않은 날짜 옵션 ID일 수 있습니다. Meeting ID: ${id}, Options: ${dateOptionIds.join(
+          ","
+        )}`
+      );
+      // 필요하다면 여기서 404 에러를 반환할 수도 있음
     }
 
     const message =
