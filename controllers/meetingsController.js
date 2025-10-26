@@ -177,12 +177,10 @@ exports.handleVote = async (req, res) => {
       const isMatch = await bcrypt.compare(password, participant.password);
       if (!isMatch) {
         // 비밀번호가 틀리면 에러 반환
-        return res
-          .status(403)
-          .json({
-            error:
-              "비밀번호가 일치하지 않습니다. 기존 참여자는 정확한 비밀번호를 입력해주세요.",
-          });
+        return res.status(403).json({
+          error:
+            "비밀번호가 일치하지 않습니다. 기존 참여자는 정확한 비밀번호를 입력해주세요.",
+        });
       }
       participantId = participant._id; // 기존 참여자 ID 사용
     } else {
@@ -437,6 +435,43 @@ exports.searchMeetings = async (req, res) => {
     res.status(200).json(meetings);
   } catch (error) {
     console.error("모임 검색 오류:", error);
+    res.status(500).json({ error: "서버 오류가 발생했습니다." });
+  }
+};
+
+// POST /api/meetings/:id/auth - 생성자 비밀번호 인증
+exports.authenticateCreator = async (req, res) => {
+  try {
+    const db = req.app.locals.db;
+    const meetingsCollection = db.collection("meetings");
+    const { id } = req.params;
+    const { password } = req.body; // 요청 Body에서 비밀번호 받기
+
+    // 1. 유효성 검사
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "유효하지 않은 ID 형식입니다." });
+    }
+    if (!password) {
+      return res.status(401).json({ error: "비밀번호를 입력해주세요." });
+    }
+
+    // 2. 모임 찾기
+    const meeting = await meetingsCollection.findOne({ _id: new ObjectId(id) });
+    if (!meeting) {
+      return res.status(404).json({ error: "해당 모임을 찾을 수 없습니다." });
+    }
+
+    // 3. 비밀번호 비교
+    const isMatch = await bcrypt.compare(password, meeting.password);
+    if (!isMatch) {
+      // 비밀번호 불일치 시 401 Unauthorized 반환
+      return res.status(401).json({ error: "비밀번호가 일치하지 않습니다." });
+    }
+
+    // 4. 인증 성공
+    res.status(200).json({ message: "인증 성공" });
+  } catch (error) {
+    console.error("생성자 인증 오류:", error);
     res.status(500).json({ error: "서버 오류가 발생했습니다." });
   }
 };
