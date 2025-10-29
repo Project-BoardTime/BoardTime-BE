@@ -330,18 +330,22 @@ exports.getVotersForDate = async (req, res) => {
   }
 };
 
-// PUT /api/meetings/:id - 모임 정보 수정
+// PUT /api/meetings/:id - 모임 정보 수정 (날짜 옵션 포함)
 exports.updateMeeting = async (req, res) => {
   try {
     const db = req.app.locals.db;
     const meetingsCollection = db.collection("meetings");
     const { id } = req.params;
-    const { password, title, description, deadline } = req.body;
+    // 요청 Body에서 수정할 모든 필드를 받아옵니다 (dateOptions 추가)
+    const { password, title, description, deadline, dateOptions } = req.body;
 
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "유효하지 않은 ID 형식입니다." });
+    }
     if (!password) {
       return res
         .status(401)
-        .json({ error: "수정 권한 확인을 위해 비밀번호가 필요합니다." });
+        .json({ error: "수정 권한 확인을 위해 현재 비밀번호가 필요합니다." });
     }
 
     const meeting = await meetingsCollection.findOne({ _id: new ObjectId(id) });
@@ -349,25 +353,51 @@ exports.updateMeeting = async (req, res) => {
       return res.status(404).json({ error: "수정할 모임을 찾을 수 없습니다." });
     }
 
-    // 비밀번호 비교
+    // 현재 비밀번호 확인
     const isMatch = await bcrypt.compare(password, meeting.password);
     if (!isMatch) {
       return res
         .status(403)
-        .json({ error: "비밀번호가 일치하지 않아 수정할 수 없습니다." });
+        .json({ error: "현재 비밀번호가 일치하지 않아 수정할 수 없습니다." });
     }
 
+    // --- 업데이트할 내용 구성 (updates 객체) ---
     const updates = {};
-    if (title) updates.title = title;
-    if (description) updates.description = description;
+    if (title !== undefined) updates.title = title; // 빈 문자열도 업데이트 허용
+    if (description !== undefined) updates.description = description;
     if (deadline) updates.deadline = new Date(deadline);
 
-    if (Object.keys(updates).length > 0) {
-      await meetingsCollection.updateOne(
-        { _id: new ObjectId(id) },
-        { $set: updates }
-      );
+    // --- ⬇️ 날짜 옵션 업데이트 로직 추가 ⬇️ ---
+    if (dateOptions && Array.isArray(dateOptions) && dateOptions.length > 0) {
+      // 기존 투표 기록은 초기화됨
+      updates.dateOptions = dateOptions.map((dateStr) => ({
+        _id: new ObjectId(), // 각 옵션에 새로운 ID 부여
+        date: new Date(dateStr), // 문자열을 Date 객체로 변환
+        votes: [], // 투표 기록 초기화
+      }));
+    } else if (
+      dateOptions &&
+      Array.isArray(dateOptions) &&
+      dateOptions.length === 0
+    ) {
+      // 빈 배열이 오면 날짜 옵션을 모두 삭제 (또는 에러 처리 선택 가능)
+      // 여기서는 일단 업데이트하지 않도록 처리 (필요시 updates.dateOptions = [] 추가)
+      // 또는 return res.status(400).json({ error: '날짜 옵션은 최소 하나 이상 필요합니다.' });
     }
+    // --- ⬆️ 날짜 옵션 업데이트 로직 끝 ⬆️ ---
+
+    // 업데이트할 내용이 password 외에 없으면 에러 (비밀번호 변경은 별도 API 권장)
+    if (Object.keys(updates).length === 0) {
+      return res
+        .status(400)
+        .json({ error: "수정할 내용이 없습니다. (비밀번호 변경 불가)" });
+    }
+
+    // DB 업데이트 ($set 사용)
+    await meetingsCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updates }
+    );
 
     res.status(200).json({ message: "모임 정보가 성공적으로 수정되었습니다." });
   } catch (error) {
